@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import ProductCard from './ProductCard';
 import QuickViewModal from './QuickViewModal';
 import { useScrollReveal } from '../hooks/useScrollReveal';
-import { supabase } from '../lib/supabase';
-import LoadingSpinner from './ui/LoadingSpinner';
+import { products } from '../data';
 
 const filters = [
   { key: 'all', label: 'All' },
@@ -14,29 +13,14 @@ const filters = [
 
 export default function Products() {
   const [activeFilter, setActiveFilter] = useState('all');
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [quickViewProduct, setQuickViewProduct] = useState(null);
   const ref = useScrollReveal();
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
-
-  const fetchProducts = async () => {
-    const { data } = await supabase
-      .from('products')
-      .select('*')
-      .eq('featured', true)
-      .limit(6);
-
-    setProducts(data || []);
-    setLoading(false);
-  };
+  const featured = useMemo(() => products.filter(p => p.featured), []);
 
   const filtered = activeFilter === 'all'
-    ? products
-    : products.filter(p => p.category === activeFilter);
+    ? featured
+    : featured.filter(p => p.category === activeFilter);
 
   return (
     <section id="products" className="py-24 px-[5%] bg-ink">
@@ -67,19 +51,13 @@ export default function Products() {
         </div>
 
         {/* Product Grid */}
-        {loading ? (
-          <div className="flex justify-center py-20">
-            <LoadingSpinner size="lg" />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 max-w-7xl mx-auto">
-            {filtered.map(product => (
-              <div key={product.id} className="reveal">
-                <ProductCard product={product} showQuickView={setQuickViewProduct} />
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 max-w-7xl mx-auto">
+          {filtered.map(product => (
+            <div key={product.id} className="reveal">
+              <ProductCard product={product} showQuickView={setQuickViewProduct} />
+            </div>
+          ))}
+        </div>
       </div>
 
       <QuickViewModal

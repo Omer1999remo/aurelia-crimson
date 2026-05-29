@@ -1,18 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Heart, ShoppingCart, ChevronLeft, ChevronRight, Star, Check } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { products, mockReviews } from '../data';
 import { useCart } from '../CartContext';
 import { useWishlist } from '../context/WishlistContext';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
 
 export default function ProductDetail() {
   const { id } = useParams();
-  const [product, setProduct] = useState(null);
-  const [reviews, setReviews] = useState([]);
-  const [relatedProducts, setRelatedProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [currentImage, setCurrentImage] = useState(0);
   const [selectedQty, setSelectedQty] = useState(1);
   const [activeTab, setActiveTab] = useState('details');
@@ -20,57 +15,12 @@ export default function ProductDetail() {
   const { addToCart } = useCart();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
 
-  useEffect(() => {
-    fetchProduct();
-    fetchReviews();
-  }, [id]);
-
-  const fetchProduct = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
-
-    if (!error && data) {
-      setProduct(data);
-      fetchRelatedProducts(data.category, data.id);
-    }
-    setLoading(false);
-  };
-
-  const fetchReviews = async () => {
-    const { data } = await supabase
-      .from('reviews')
-      .select('*')
-      .eq('product_id', id);
-    setReviews(data || []);
-  };
-
-  const fetchRelatedProducts = async (category, productId) => {
-    const { data } = await supabase
-      .from('products')
-      .select('*')
-      .eq('category', category)
-      .neq('id', productId)
-      .limit(4);
-    setRelatedProducts(data || []);
-  };
-
-  const handleAddToCart = () => {
-    for (let i = 0; i < selectedQty; i++) {
-      addToCart(product);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-ink flex items-center justify-center">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
+  const product = useMemo(() => products.find(p => String(p.id) === id), [id]);
+  const reviews = useMemo(() => mockReviews.filter(r => r.product_id === Number(id)), [id]);
+  const relatedProducts = useMemo(() => {
+    if (!product) return [];
+    return products.filter(p => p.category === product.category && p.id !== product.id).slice(0, 4);
+  }, [product, id]);
 
   if (!product) {
     return (
@@ -86,6 +36,12 @@ export default function ProductDetail() {
 
   const images = product.images?.length > 0 ? product.images : [product.image];
   const inWishlist = isInWishlist(product.id);
+
+  const handleAddToCart = () => {
+    for (let i = 0; i < selectedQty; i++) {
+      addToCart(product);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-ink pt-24 pb-16">

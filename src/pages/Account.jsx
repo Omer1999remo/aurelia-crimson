@@ -1,13 +1,26 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
+import { useWishlist } from '../context/WishlistContext';
+import { mockOrders } from '../data';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
-import { Package, Heart, User, MapPin, CreditCard, LogOut } from 'lucide-react';
+import { Package, Heart, User, MapPin, LogOut } from 'lucide-react';
+
+const ORDERS_KEY = 'mock_orders';
+
+function getStoredOrders() {
+  const raw = localStorage.getItem(ORDERS_KEY);
+  return raw ? JSON.parse(raw) : mockOrders;
+}
+
+function storeOrders(orders) {
+  localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+}
 
 export default function Account() {
   const { user, profile, signOut, loading: authLoading } = useAuth();
+  const { wishlist, removeFromWishlist } = useWishlist();
   const [orders, setOrders] = useState([]);
   const [activeTab, setActiveTab] = useState('orders');
   const [loading, setLoading] = useState(true);
@@ -21,22 +34,10 @@ export default function Account() {
 
   useEffect(() => {
     if (user) {
-      fetchOrders();
+      setOrders(getStoredOrders());
+      setLoading(false);
     }
   }, [user]);
-
-  const fetchOrders = async () => {
-    const { data } = await supabase
-      .from('orders')
-      .select(`
-        *,
-        order_items (*)
-      `)
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-    setOrders(data || []);
-    setLoading(false);
-  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -62,7 +63,6 @@ export default function Account() {
     <div className="min-h-screen bg-ink pt-20 pb-16">
       <div className="max-w-7xl mx-auto px-[5%]">
         <div className="flex flex-col md:flex-row gap-8">
-          {/* Sidebar */}
           <aside className="md:w-64 shrink-0">
             <div className="bg-white/5 border border-gold/35 rounded p-6 mb-6">
               <div className="text-gold text-2xl font-serif mb-1">
@@ -92,7 +92,6 @@ export default function Account() {
             </nav>
           </aside>
 
-          {/* Content */}
           <main className="flex-1">
             {activeTab === 'orders' && (
               <div>
@@ -142,13 +141,33 @@ export default function Account() {
             {activeTab === 'wishlist' && (
               <div>
                 <h2 className="text-gold text-3xl font-serif mb-6">Wishlist</h2>
-                <div className="text-center py-12">
-                  <Heart className="mx-auto text-gold/50 mb-4" size={48} />
-                  <p className="text-white/60 mb-4">Your wishlist is empty</p>
-                  <Link to="/shop">
-                    <Button>Browse Collection</Button>
-                  </Link>
-                </div>
+                {wishlist.length > 0 ? (
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {wishlist.map(item => (
+                      <div key={item.id} className="bg-white/5 border border-gold/35 rounded overflow-hidden">
+                        <img src={item.image} alt={item.name} className="w-full h-48 object-cover" />
+                        <div className="p-4">
+                          <div className="text-white font-medium mb-1">{item.name}</div>
+                          <div className="text-gold mb-3">${item.price?.toLocaleString()}</div>
+                          <div className="flex gap-2">
+                            <Link to={`/product/${item.id}`} className="flex-1">
+                              <Button className="w-full text-sm" size="sm">View</Button>
+                            </Link>
+                            <Button variant="secondary" size="sm" onClick={() => removeFromWishlist(item.id)}>Remove</Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <Heart className="mx-auto text-gold/50 mb-4" size={48} />
+                    <p className="text-white/60 mb-4">Your wishlist is empty</p>
+                    <Link to="/shop">
+                      <Button>Browse Collection</Button>
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
 

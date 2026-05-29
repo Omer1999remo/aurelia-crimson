@@ -1,7 +1,30 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext(null);
+
+const USERS_KEY = 'mock_users';
+const SESSION_KEY = 'mock_session';
+
+function getStoredUsers() {
+  return JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
+}
+
+function storeUsers(users) {
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
+function getStoredSession() {
+  const raw = localStorage.getItem(SESSION_KEY);
+  return raw ? JSON.parse(raw) : null;
+}
+
+function storeSession(session) {
+  if (session) {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  } else {
+    localStorage.removeItem(SESSION_KEY);
+  }
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -9,92 +32,59 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await fetchProfile(session.user.id);
-      }
-      setLoading(false);
-    };
-
-    getSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      (async () => {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await fetchProfile(session.user.id);
-        } else {
-          setProfile(null);
-        }
-        setLoading(false);
-      })();
-    });
-
-    return () => subscription.unsubscribe();
+    const session = getStoredSession();
+    if (session) {
+      setUser(session.user);
+      setProfile(session.profile);
+    }
+    setLoading(false);
   }, []);
 
-  const fetchProfile = async (userId) => {
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (!error && data) {
-      setProfile(data);
-    }
-  };
-
   const signUp = useCallback(async (email, password, fullName) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    if (error) throw error;
-
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('user_profiles')
-        .insert([{ id: data.user.id, full_name: fullName }]);
-
-      if (profileError) throw profileError;
+    const users = getStoredUsers();
+    if (users.find(u => u.email === email)) {
+      throw new Error('User already registered');
     }
+    const id = crypto.randomUUID();
+    const newUser = { id, email, password, full_name: fullName };
+    users.push(newUser);
+    storeUsers(users);
 
-    return data;
+    const userProfile = { id, full_name: fullName, email, phone: '' };
+    const session = { user: { id, email }, profile: userProfile };
+    storeSession(session);
+    setUser(session.user);
+    setProfile(userProfile);
+    return session;
   }, []);
 
   const signIn = useCallback(async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) throw error;
-    return data;
+    const users = getStoredUsers();
+    const found = users.find(u => u.email === email && u.password === password);
+    if (!found) {
+      throw new Error('Invalid email or password');
+    }
+    const userProfile = { id: found.id, full_name: found.full_name, email: found.email, phone: '' };
+    const session = { user: { id: found.id, email: found.email }, profile: userProfile };
+    storeSession(session);
+    setUser(session.user);
+    setProfile(userProfile);
+    return session;
   }, []);
 
   const signOut = useCallback(async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    storeSession(null);
     setUser(null);
     setProfile(null);
   }, []);
 
   const updateProfile = useCallback(async (updates) => {
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .update(updates)
-      .eq('id', user.id)
-      .select()
-      .maybeSingle();
-
-    if (error) throw error;
-    setProfile(data);
-    return data;
-  }, [user]);
+    const updated = { ...profile, ...updates };
+    const session = getStoredSession();
+    storeSession({ ...session, profile: updated });
+    setProfile(updated);
+    return updated;
+  }, [profile]);
 
   return (
     <AuthContext.Provider value={{

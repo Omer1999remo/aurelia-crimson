@@ -2,10 +2,20 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCart } from '../CartContext';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import { CreditCard, Truck, Check } from 'lucide-react';
+
+const ORDERS_KEY = 'mock_orders';
+
+function getStoredOrders() {
+  const raw = localStorage.getItem(ORDERS_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+function storeOrders(orders) {
+  localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+}
 
 export default function Checkout() {
   const [step, setStep] = useState(1);
@@ -57,36 +67,24 @@ export default function Checkout() {
     setLoading(true);
 
     try {
-      const orderData = {
-        user_id: user?.id,
+      const orderId = crypto.randomUUID().slice(0, 8);
+      const order = {
+        id: orderId,
+        created_at: new Date().toISOString(),
         status: 'pending',
         total: totalPrice,
-        shipping_address: shipping,
-        payment_method: 'card',
+        order_items: cart.map(item => ({
+          id: crypto.randomUUID().slice(0, 8),
+          product_name: item.name,
+          product_image: item.image,
+          quantity: item.qty,
+          price: item.price,
+        })),
       };
 
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert([orderData])
-        .select()
-        .maybeSingle();
-
-      if (orderError) throw orderError;
-
-      const orderItems = cart.map(item => ({
-        order_id: order.id,
-        product_id: item.id,
-        product_name: item.name,
-        product_image: item.image,
-        quantity: item.qty,
-        price: item.price,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
+      const orders = getStoredOrders();
+      orders.unshift(order);
+      storeOrders(orders);
 
       clearCart();
       navigate('/order-confirmation', { state: { orderId: order.id } });
@@ -109,7 +107,6 @@ export default function Checkout() {
       <div className="max-w-4xl mx-auto px-[5%]">
         <h1 className="text-gold text-4xl font-serif text-center mb-8">Checkout</h1>
 
-        {/* Steps */}
         <div className="flex items-center justify-center gap-4 mb-12">
           {steps.map((s, i) => (
             <div key={s.id} className="flex items-center">
@@ -125,7 +122,6 @@ export default function Checkout() {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Form */}
           <div className="lg:col-span-2">
             <form onSubmit={handleSubmit} className="bg-white/5 border border-gold/35 rounded p-8">
               {step === 1 && (
@@ -197,7 +193,6 @@ export default function Checkout() {
             </form>
           </div>
 
-          {/* Order Summary */}
           <div className="lg:col-span-1">
             <div className="bg-white/5 border border-gold/35 rounded p-6 sticky top-24">
               <h3 className="text-white text-lg font-semibold mb-4">Order Summary</h3>

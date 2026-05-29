@@ -1,15 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { products } from '../data';
 import ProductCard from '../components/ProductCard';
 import SearchBar from '../components/SearchBar';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
 import QuickViewModal from '../components/QuickViewModal';
 
 export default function Shop() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [quickViewProduct, setQuickViewProduct] = useState(null);
 
   const category = searchParams.get('category') || 'all';
@@ -17,27 +14,18 @@ export default function Shop() {
   const sort = searchParams.get('sort') || 'featured';
   const priceRange = searchParams.get('price') || 'all';
 
-  useEffect(() => {
-    fetchProducts();
-  }, [category, search, sort, priceRange]);
-
-  const fetchProducts = async () => {
-    setLoading(true);
-    let query = supabase.from('products').select('*');
+  const filteredProducts = useMemo(() => {
+    let filtered = [...products];
 
     if (category && category !== 'all') {
-      query = query.eq('category', category);
+      filtered = filtered.filter(p => p.category === category);
     }
 
     if (search) {
-      query = query.ilike('name', `%${search}%`);
+      const q = search.toLowerCase();
+      filtered = filtered.filter(p => p.name.toLowerCase().includes(q));
     }
 
-    const { data } = await query;
-
-    let filtered = data || [];
-
-    // Price filter
     if (priceRange !== 'all') {
       const [min, max] = priceRange.split('-').map(Number);
       filtered = filtered.filter(p => {
@@ -48,23 +36,18 @@ export default function Shop() {
       });
     }
 
-    // Sort
     if (sort === 'price-asc') {
       filtered.sort((a, b) => a.price - b.price);
     } else if (sort === 'price-desc') {
       filtered.sort((a, b) => b.price - a.price);
-    } else if (sort === 'newest') {
-      filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     } else if (sort === 'name') {
       filtered.sort((a, b) => a.name.localeCompare(b.name));
     } else {
-      // Featured first
       filtered.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
     }
 
-    setProducts(filtered);
-    setLoading(false);
-  };
+    return filtered;
+  }, [category, search, sort, priceRange]);
 
   const handleSearch = (query) => {
     setSearchParams(prev => {
@@ -139,7 +122,6 @@ export default function Shop() {
               className="px-4 py-2 bg-white/5 border border-gold/35 rounded text-white text-sm outline-none"
             >
               <option value="featured">Featured</option>
-              <option value="newest">Newest</option>
               <option value="name">Name A-Z</option>
               <option value="price-asc">Price: Low to High</option>
               <option value="price-desc">Price: High to Low</option>
@@ -151,20 +133,16 @@ export default function Shop() {
               </button>
             )}
           </div>
-          <div className="text-white/60 text-sm">{products.length} products</div>
+          <div className="text-white/60 text-sm">{filteredProducts.length} products</div>
         </div>
       </div>
 
       {/* Products Grid */}
       <div className="py-12 px-[5%]">
         <div className="max-w-7xl mx-auto">
-          {loading ? (
-            <div className="flex justify-center py-20">
-              <LoadingSpinner size="lg" />
-            </div>
-          ) : products.length > 0 ? (
+          {filteredProducts.length > 0 ? (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-              {products.map(product => (
+              {filteredProducts.map(product => (
                 <ProductCard key={product.id} product={product} showQuickView={setQuickViewProduct} />
               ))}
             </div>
